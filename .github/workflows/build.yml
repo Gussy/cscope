@@ -1,9 +1,18 @@
 name: build
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*"
+
+permissions:
+  contents: write
 
 jobs:
   build:
+    name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -14,7 +23,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install automake (macos only)
-        if: matrix.os == 'macos-latest'
+        if: runner.os == 'macOS'
         run: brew install automake
 
       - name: Build
@@ -32,3 +41,34 @@ jobs:
           name: cscope-${{ matrix.os }}
           path: |
             ./src/cscope
+
+  release-publish:
+    name: Publish Release
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: .github/artifacts
+
+      - name: Get version from tag
+        id: tag
+        run: echo "version=$(echo "${{github.ref_name}}" | sed 's/v//')" >> $GITHUB_OUTPUT
+
+      - name: Build archive
+        shell: bash
+        run: |
+          chmod +x .github/artifacts/cscope-macos-latest/cscope
+          chmod +x .github/artifacts/cscope-ubuntu-latest/cscope
+          tar czf cscope-${{ steps.tag.outputs.version }}-darwin.tar.gz -C .github/artifacts/cscope-macos-latest/ .
+          tar czf cscope-${{ steps.tag.outputs.version }}-linux.tar.gz -C .github/artifacts/cscope-ubuntu-latest/ .
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ steps.tag.outputs.version }}
+          files: |
+            cscope-*-*.tar.gz
