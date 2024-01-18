@@ -1,0 +1,34 @@
+name: build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install automake (macos only)
+        if: matrix.os == 'macos-latest'
+        run: brew install automake
+
+      - name: Build
+        run: |
+          autoreconf -i -f
+          ./configure
+          make
+
+      - name: Test the binary
+        run: ./src/cscope --version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: cscope-${{ matrix.os }}
+          path: |
+            ./src/cscope
